@@ -14,9 +14,7 @@ function schedule = createSchedule_in_greed(data, chromo)
     % 首先分割为数个JSP问题
     for i = 1:job_num
         FSi{1, FS(i)} = [FSi{1, FS(i)} i];
-        % factory indicate job2factory relation ,may==0,need consider
-        % now need construct job_No with job_No_really map
-        % above is FS diagram, now consider PS
+
     end
 
     % ------------------------------------------重写！

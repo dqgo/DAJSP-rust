@@ -25,27 +25,4 @@ function initialPopu = createInitialPopu(machNum, workpieceNum)
     initialPopu = initialPopu(randperm(lengthChromo));
 end
 
-% function [chromos] = createInitialPopus(popu,data)
-%     chromos=cell(3,popu);
-%     for i=1:popu
-%         factory_num=data{1,4}; [job_num]=data{1,2}; [work_num]=data{1,3};assembly_num=data{1,4};
-%         for j=1:job_num
-%             chromos{1,i}(j)=randperm(factory_num,1)';
-%         end
-%         for j=1:job_num
-%             chromos{2,i}=createInitialPopu(work_num, job_num)' ;
-%         end
-%         for j=1:job_num
-%             chromos{3,i}(j)=randperm(assembly_num,1)';
-%         end
-%     end
-% end
-%
-% % 生成第一个染色体，随机
-% function initialPopu = createInitialPopu(machNum, workpieceNum)
-%     lengthChromo = machNum * workpieceNum;
-%     % 使用 repelem 生成重复的工件编号
-%     initialPopu = repelem(1:workpieceNum, machNum);
-%     % 随机排列生成染色体
-%     initialPopu = initialPopu(randperm(lengthChromo));
-% end
+
