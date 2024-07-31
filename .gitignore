@@ -1,1 +1,2 @@
 /target
+src/approximate_fitness.m src/calcFitness_in_greedy.m src/changeDataFunction.m src/create_nei.m src/createInitialPopus.m src/createSchedule_in_greedy.m src/createScheduleSubFactory.m src/crossDAJSP.m src/find_keyblock.asv src/find_keyblock.m src/find_keypath_schedule.m src/find_rows_in_schedule.m src/find_schedule_question.m src/mark_keyblocks.m src/muteDAJSP.m src/right_schedule.m src/selectChromos.m src/thisMinCmax src/TS_with_greedy4DAJSP.m
