@@ -1,7 +1,7 @@
 use plotters::data;
 mod load_data;
 
-use load_data::change_data_function;
+use crate::load_data::change_data_function;
 
 fn main() {
     // ------------系列----------
@@ -18,10 +18,10 @@ fn main() {
 
     //载入数据
     let data = change_data_function();
-    println!("{:?}", data);
+    // println!("{:?}", data);
 
     //初始化种群
-    // let mut chromos = init_population(data, popu);
+    let mut chromos = init_population(data, popu);
 
     //开始迭代
     while now_iterate < max_iterate {

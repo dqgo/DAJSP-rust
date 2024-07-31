@@ -1,5 +1,5 @@
 #[derive(Debug)]
-struct Data {
+pub struct Data {
     change_data: Vec<Vec<i32>>,
     job_num: usize,
     work_num: usize,
@@ -8,7 +8,7 @@ struct Data {
     assembly_data: Vec<i32>,
 }
 
-fn change_data_function() -> Data {
+pub fn change_data_function() -> Data {
     let machine = vec![
         vec![8, 12, 9, 4, 13, 2, 14, 1, 15, 7, 10, 5, 3, 11, 6],
         vec![13, 2, 12, 10, 7, 4, 3, 5, 6, 9, 14, 15, 11, 1, 8],
