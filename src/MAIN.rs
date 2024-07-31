@@ -41,12 +41,10 @@ fn main() {
     let mut chromos = create_initial_popus(popu, &data);
     //通过chromos[i]来访问第i个染色体，通过chromos[i].0来访问第i个染色体的工厂分配，通过chromos[i].1来访问第i个染色体的工序分配，通过chromos[i].2来访问第i个染色体的装配顺序
 
-
     //开始迭代
     while now_iterate < max_iterate {
-
         // 计算适应度
-        let fitness=calc_fitness(&chromos, &data);
+        let fitness = calc_fitness(&chromos, &data);
 
         now_iterate += 1;
     }
@@ -176,39 +174,69 @@ fn create_initial_popu(mach_num: usize, workpiece_num: usize) -> Vec<usize> {
 //-------------计算适应度----------------
 fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
     let size_chromos = chromos.len();
-    let mut fitness: Vec<i32> = vec![0; size_chromos];    
-let fitness: Vec<i32> = chromos.iter()
-    .take(size_chromos - 1)
-    .map(|chromo| {
-        let schedule = create_schedule(chromo, &data);
-        schedule.iter().map(|row| row[4]).max().unwrap()
-    })
-    .collect();
+    // let mut fitness: Vec<i32> = vec![0; size_chromos];
+    let fitness: Vec<i32> = chromos
+        .iter()
+        .take(size_chromos - 1)
+        .map(|chromo| {
+            let schedule = create_schedule(chromo, &data);
+            schedule.iter().map(|row| row[5]).max().unwrap()
+        })
+        .collect();
     fitness
 }
 //-------------计算适应度----------------
 
-
 //-------------生成调度----------------
-fn create_schedule(chromo: &(Vec<usize>,Vec<usize>,Vec<usize>), data: &Data) -> Vec<Vec<i32>> {
-    //使用半主动解码
+fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -> Vec<Vec<i32>> {
+    //使用半主动解码，所有工厂、机器号、工件号、工序号都是从1开始
+    //schedule[i] = [工件号、工序号、机器号、工厂号、开工时间、完工时间]
     let factory_num = data.factory_num;
     let job_num = data.job_num;
     let work_num = data.work_num;
     let assembly = &data.assembly;
     let assembly_data = &data.assembly_data;
     let change_data = &data.change_data;
-    let FS=&chromo.0;
-    let PS=&chromo.1;
-    let AS=& chromo.2;
-    
-    let mut FSi:Vec<Vec<usize>>=vec![vec![];factory_num];
-    let mut PSi: Vec<Vec<Vec<usize>>> = vec![vec![vec![]]; factory_num];
-    let mut datai:Vec<Vec<usize>>=vec![vec![];factory_num];
+    let FS = &chromo.0;
+    let PS = &chromo.1;
+    let AS = &chromo.2;
+
+    let mut FSi: Vec<Vec<usize>> = vec![vec![]; factory_num];
+    let mut PSi: Vec<Vec<usize>> = vec![vec![]; factory_num];
+    let mut datai: Vec<Vec<Vec<i32>>> = vec![vec![vec![]]; factory_num];
 
     // 首先分割为数个JSP问题，分割工厂分配
     for i in 0..job_num {
-        FSi[FS[i] - 1].push(i);
+        FSi[FS[i] - 1].push(i + 1);
     }
+
+    // 分割工序分配
+    for i in 0..factory_num {
+        PSi[i] = PS.iter()
+                   .filter(|&&ps| FSi[i].contains(&ps))
+                   .cloned()
+                   .collect();
+    }
+    // 分割数据
+    // for i in 0..factory_num {
+    //     let ps_row = &PSi[i];
+    //     let mut data_row = Vec::new();
+        
+    //     for ps in ps_row {
+    //         let mut job_data = Vec::new();
+    //         for &job_index in ps {
+    //             job_data.push(change_data[job_index - 1].clone());
+    //         }
+    //         data_row.push(job_data);
+    //     }
+        
+    //     datai[i] = data_row;
+    // }
+    for i in 0..factory_num {
+        datai[i] = FSi[i].iter()
+                         .map(|&index| change_data[index - 1].clone())
+                         .collect();
+    }
+    println!("{:?}", datai[0]);
     vec![vec![0; 6]; 10]
 }
