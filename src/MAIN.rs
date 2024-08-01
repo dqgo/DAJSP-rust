@@ -1,11 +1,12 @@
-#[allow(warnings)]
+#![allow(warnings)]
+
 use plotters::data;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use rayon::vec;
+use std::collections::HashMap;
 use std::io;
 use std::time::{Duration, Instant};
-
 #[derive(Debug)]
 
 pub struct Data {
@@ -19,8 +20,8 @@ pub struct Data {
 
 fn main() {
     // ------------系列----------
-    let popu = 2;
-    let max_iterate = 9999;
+    let popu = 1_;
+    let max_iterate = 1;
     let mut now_iterate = 0;
     let p_cross = 0.8;
     let mut p_mutate = 0.05;
@@ -47,6 +48,7 @@ fn main() {
         let fitness = calc_fitness(&chromos, &data);
 
         now_iterate += 1;
+        print!("迭代次数: {}/{}", now_iterate, max_iterate);
     }
     // 结束计时
     let duration = start.elapsed();
@@ -169,7 +171,7 @@ fn create_initial_popu(mach_num: usize, workpiece_num: usize) -> Vec<usize> {
     initial_popu.shuffle(&mut rand::thread_rng());
     initial_popu
 }
-//-------------生成初始解----------------
+
 
 //-------------计算适应度----------------
 fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
@@ -185,7 +187,8 @@ fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data
         .collect();
     fitness
 }
-//-------------计算适应度----------------
+
+
 
 //-------------生成调度----------------
 fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -> Vec<Vec<i32>> {
@@ -212,31 +215,188 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
 
     // 分割工序分配
     for i in 0..factory_num {
-        PSi[i] = PS.iter()
-                   .filter(|&&ps| FSi[i].contains(&ps))
-                   .cloned()
-                   .collect();
+        PSi[i] = PS
+            .iter()
+            .filter(|&&ps| FSi[i].contains(&ps))
+            .cloned()
+            .collect();
     }
     // 分割数据
-    // for i in 0..factory_num {
-    //     let ps_row = &PSi[i];
-    //     let mut data_row = Vec::new();
-        
-    //     for ps in ps_row {
-    //         let mut job_data = Vec::new();
-    //         for &job_index in ps {
-    //             job_data.push(change_data[job_index - 1].clone());
-    //         }
-    //         data_row.push(job_data);
-    //     }
-        
-    //     datai[i] = data_row;
-    // }
+
     for i in 0..factory_num {
-        datai[i] = FSi[i].iter()
-                         .map(|&index| change_data[index - 1].clone())
-                         .collect();
+        datai[i] = FSi[i]
+            .iter()
+            .map(|&index| change_data[index - 1].clone())
+            .collect();
     }
-    println!("{:?}", datai[0]);
-    vec![vec![0; 6]; 10]
+    // 注意 datai的某一行的某个subdatai，他的第i行并不代表是工件i的数据！！！
+    // 而是该工厂的FA中的第i个工件的数据！！！
+    // MATLAB上的程序也有这个问题！！！2024年7月31日 明天看看
+
+    // 现在PSi(i) & subdata(i)共同表示一个JSP问题，
+    //但是，工件号是不连续的，现在要把他变成连续的，并且datai的第i行不一定代表工厂中第i个工件的数据！！！
+
+    let mut schedule_withno_assembly: Vec<Vec<i32>> = Vec::new();
+
+    for i in 0..factory_num {
+        //开始安排工厂i
+        let this_factory_job = &FSi[i];
+        let this_factory_work = &PSi[i];
+        let this_factory_data = &datai[i];
+
+        //现在要将this_factory_job、this_factory_work和this_factory_data的数据一一对应起来
+        let mut job_mapping = HashMap::new();
+        let mut reverse_mapping = HashMap::new();
+        for (new_index, &job) in this_factory_job.iter().enumerate() {
+            job_mapping.insert(job, new_index + 1);
+            reverse_mapping.insert(new_index + 1, job);
+        }
+
+        // 更新 this_factory_work
+        let new_factory_work: Vec<_> = this_factory_work
+            .iter()
+            .map(|&work| *job_mapping.get(&work).unwrap())
+            .collect();
+
+        // 重新排列 this_factory_data
+        let mut new_factory_data = vec![vec![]; this_factory_job.len()];
+        for (old_index, &job) in this_factory_job.iter().enumerate() {
+            let new_index = job_mapping[&job] - 1;
+            new_factory_data[new_index] = this_factory_data[old_index].clone();
+        }
+
+        // 新的 job
+        let new_job: Vec<_> = (1..=this_factory_job.len()).collect();
+
+        // 使用反向映射找到原来的工件号
+        let original_job: Vec<_> = new_job
+            .iter()
+            .map(|&new_index| reverse_mapping[&new_index])
+            .collect();
+        
+        let this_factory_job_num = this_factory_job.len();
+        let this_factory_work_num = this_factory_work.len();
+        let mut sub_schedule = creatScheduleSubFactory(new_factory_data, new_factory_work, this_factory_job_num, this_factory_work_num);
+
+        // 将sub_schedule的工件号转换为原来的工件号
+        for entry in &mut sub_schedule {
+            entry[0] = reverse_mapping[&(entry[0] as usize)] as i32;
+        }
+        // 将工厂号、装配号、属性号添加到调度中
+        //schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配)]
+        for row in &mut sub_schedule {
+            row[5] = i as i32 + 1; 
+            row[6] = AS[row[0] as usize] as i32;
+            row[7] = 0;
+        }
+
+        schedule_withno_assembly.extend(sub_schedule);
+    }
+    //至此，得到没有装配的调度,现在来看装配工序
+    // let mut schedule_only_assembly: Vec<Vec<Vec<i32>>> = vec![vec![-1; 8]; assembly_data.len()].iter().map(|_| vec![vec![0; 8]; 1]).collect();
+    let mut schedule_only_assembly=vec![vec![-1;8];assembly_data.len()];
+    let mut assembly_can_start_time = vec![0; assembly_data.len()];
+
+    for i in 0.. assembly_data.len() {
+        //找到每个装配工序的可以开始的时间
+
+        //先找到该装备工序对应的所有工序
+        let same_assembly_work_schedule= schedule_withno_assembly.iter().filter(|&x| x[6]==(i+1) as i32 ).collect::<Vec<_>>();
+        assembly_can_start_time[i]=same_assembly_work_schedule.iter().map(|x| x[4]).max().unwrap();
+    }
+    //进行装配车间调度
+    schedule_only_assembly=create_assembly_schedule(schedule_only_assembly,assembly_data,assembly_can_start_time);
+    schedule=schedule_withno_assembly.extend(schedule_only_assembly);
+    schedule
 }
+
+
+//-------------使用单机调度贪心算法生成装配调度----------------
+fn create_assembly_schedule(
+    mut schedule_only_assembly: Vec<Vec<i32>>,
+    assembly_data: &Vec<i32>,
+    assembly_can_start_time: Vec<i32>
+) -> Vec<Vec<i32>> {
+    let n = assembly_can_start_time.len();
+    let mut current_time = 0;
+    let mut schedule = vec![vec![0; 3]; n]; // 第一列: 工件号, 第二列: 开工时间, 第三列: 完工时间
+
+    // 初始化未完成任务的集合
+    let mut remaining_tasks: Vec<(usize, i32, i32)> = (0..n)
+        .map(|i| (i, assembly_can_start_time[i], assembly_data[i]))
+        .collect();
+
+    // 按最早开工时间排序
+    remaining_tasks.sort_by_key(|k| k.1);
+
+    while !remaining_tasks.is_empty() {
+        // 可用任务
+        let available_tasks: Vec<_> = remaining_tasks
+            .iter()
+            .filter(|&&(_, start_time, _)| start_time <= current_time)
+            .cloned()
+            .collect();
+
+        if available_tasks.is_empty() {
+            // 当前时间内没有可开始的任务
+            current_time = remaining_tasks[0].1;
+            continue;
+        }
+
+        // 选择加工时间最短的任务
+        let min_task = available_tasks.iter().min_by_key(|&&(_, _, duration)| duration).unwrap();
+        let task_id = min_task.0;
+        let start_time = current_time;
+        let finish_time = current_time + min_task.2;
+
+        // 记录任务完成时间
+        schedule[task_id] = vec![task_id as i32, start_time, finish_time];
+
+        // 更新当前时间
+        current_time = finish_time;
+
+        // 从未完成任务中移除已完成任务
+        remaining_tasks.retain(|&(id, _, _)| id != task_id);
+    }
+
+    // 按任务号排序
+    schedule.sort_by_key(|k| k[0]);
+
+    // 更新 schedule_only_assembly
+    for (i, task) in schedule.iter().enumerate() {
+        schedule_only_assembly[i][3] = task[1];
+        schedule_only_assembly[i][4] = task[2];
+    }
+
+    schedule_only_assembly
+}
+
+//-------------半主动生成子工厂调度----------------
+
+fn creatScheduleSubFactory(change_data: Vec<Vec<i32>>, chromo: Vec<usize>, workpiece_num: usize, mach_num: usize) -> Vec<Vec<i32>> {
+    let length_num = chromo.len();
+    let mut schedule = vec![vec![0; 6]; length_num];
+    let mut job_now_process = vec![0; workpiece_num];
+    let mut job_now_can_start_time = vec![0; workpiece_num];
+    let mut mach_can_start_time = vec![0; mach_num];
+    
+    for i in 0..length_num {
+        let job_id = chromo[i];
+        job_now_process[job_id - 1] += 1;
+        let mach_id: usize = change_data[job_id - 1][2 * job_now_process[job_id - 1] - 2] as usize;
+        let work_speed_time = change_data[job_id - 1][2 * job_now_process[job_id - 1] - 1];
+
+        let job_can_start_time = job_now_can_start_time[job_id - 1];
+        let this_mach_can_start_time = mach_can_start_time[mach_id - 1];
+        let start_time = if job_can_start_time > this_mach_can_start_time { job_can_start_time } else { this_mach_can_start_time };
+
+        // 已经完成插入，更新表单时间
+        job_now_can_start_time[job_id - 1] = start_time + work_speed_time;
+        mach_can_start_time[mach_id - 1] = start_time + work_speed_time;
+        schedule[i] = vec![job_id as i32, job_now_process[job_id - 1] as i32, mach_id as i32, start_time as i32, (start_time + work_speed_time) as i32, 0];
+    }
+    schedule
+}
+
+
+

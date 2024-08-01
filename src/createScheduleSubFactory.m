@@ -72,29 +72,29 @@ function schedule = createScheduleSubFactory(changeData, chromo, workpieceNum, m
 
 end
 
-% function schedule = createSchedule(changeData,chromo,workpieceNum,machNum)
-%     lengthNum=size(chromo,2);
-%     schedule=zeros(lengthNum,5);
-%     workpieceProcessId=zeros(1,workpieceNum);
-%     workpieceCanStartTime=zeros(1,workpieceNum);
-%     machCanStartTime=zeros(1,machNum);
-%     for i=1:lengthNum
-%         workpieceId=chromo(i);
-%         workpieceProcessId(workpieceId)=workpieceProcessId(workpieceId)+1;
-%         machId=changeData(workpieceId,2*workpieceProcessId(workpieceId)-1);
-%         workpieceSpeedTime=changeData(workpieceId,2*workpieceProcessId(workpieceId));
-%
-%
-%
-%         thisWorkpieceJobCanStartTime=workpieceCanStartTime(workpieceId);
-%         thisWorkpieceMachCanStartTime=machCanStartTime(machId);
-%         workpieceStartTime=max(thisWorkpieceJobCanStartTime,thisWorkpieceMachCanStartTime);
-%
-%
-%         %在此已经完成插入了，要更新各个表单
-%         workpieceCanStartTime(workpieceId)=workpieceStartTime+workpieceSpeedTime; %更新结束时间表
-%         machCanStartTime(machId)=workpieceStartTime+workpieceSpeedTime;
-%         workpieceEndTime=workpieceStartTime+workpieceSpeedTime;
-%         schedule(i,:)=[workpieceId,workpieceProcessId(workpieceId),machId,workpieceStartTime,workpieceEndTime];
-%     end
-% end
+function schedule = createSchedule(changeData,chromo,workpieceNum,machNum)
+    lengthNum=size(chromo,2);
+    schedule=zeros(lengthNum,5);
+    workpieceProcessId=zeros(1,workpieceNum);
+    workpieceCanStartTime=zeros(1,workpieceNum);
+    machCanStartTime=zeros(1,machNum);
+    for i=1:lengthNum
+        workpieceId=chromo(i);
+        workpieceProcessId(workpieceId)=workpieceProcessId(workpieceId)+1;
+        machId=changeData(workpieceId,2*workpieceProcessId(workpieceId)-1);
+        workpieceSpeedTime=changeData(workpieceId,2*workpieceProcessId(workpieceId));
+
+
+
+        thisWorkpieceJobCanStartTime=workpieceCanStartTime(workpieceId);
+        thisWorkpieceMachCanStartTime=machCanStartTime(machId);
+        workpieceStartTime=max(thisWorkpieceJobCanStartTime,thisWorkpieceMachCanStartTime);
+
+
+        %在此已经完成插入了，要更新各个表单
+        workpieceCanStartTime(workpieceId)=workpieceStartTime+workpieceSpeedTime; %更新结束时间表
+        machCanStartTime(machId)=workpieceStartTime+workpieceSpeedTime;
+        workpieceEndTime=workpieceStartTime+workpieceSpeedTime;
+        schedule(i,:)=[workpieceId,workpieceProcessId(workpieceId),machId,workpieceStartTime,workpieceEndTime];
+    end
+end

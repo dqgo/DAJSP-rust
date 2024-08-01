@@ -32,7 +32,7 @@ function schedule = createSchedule_in_greed(data, chromo)
     for i = 1:factory_num
         % 开始安排工厂i:FSi{1,i},PSi{1,i},datai{1,i}
         this_factory_job_sequence = FSi{1, i}; this_factory_work_sequence = PSi{1, i}; this_factory_data = datai{1, i};
-        this_factory_work_num = size(this_factory_work_sequence, 2);
+        % this_factory_work_num = size(this_factory_work_sequence, 2);
         % this_factory_work_sequence_change=[this_factory_work_sequence;1:this_factory_work_num];
         % ---------------------------------------------------------------------------------------
         % 建立映射表
