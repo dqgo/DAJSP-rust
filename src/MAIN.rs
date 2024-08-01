@@ -20,8 +20,8 @@ pub struct Data {
 
 fn main() {
     // ------------系列----------
-    let popu = 10_;
-    let max_iterate = 1;
+    let popu = 10_000;
+    let max_iterate = 10;
     let mut now_iterate = 0;
     let p_cross = 0.45;
     let mut p_mutate = 0.05;
@@ -45,18 +45,21 @@ fn main() {
     //开始迭代
     while now_iterate < max_iterate {
         // 计算适应度
-        let fitness: Vec<i32> = calc_fitness(&chromos, &data);
-        // let the_best_fitness = fitness.iter().min().unwrap();
-        // let the_best_chromo = chromos[fitness.iter().position(|&r| r == *the_best_fitness).unwrap()].clone();
-
+        let fitness: Vec<i32> = calc_fitness(&chromos, &data); 
+        println!("适应度: {:?}", &fitness[1..5]);
+        let the_best_fitness = fitness.iter().min().unwrap();
+        let the_best_chromo = chromos[fitness.iter().position(|&r| r == *the_best_fitness).unwrap()].clone();
+        // println!("当前最优适应度: {}", the_best_fitness);
         // 选择
-        let (elite_chromos, mut selected_chromos) = select(&mut chromos, &fitness, &p_elite);
+        let (mut elite_chromos, mut selected_chromos) = select(&mut chromos, &fitness, &p_elite);
 
         // 交叉
         selected_chromos = cross_chromos(&selected_chromos, &p_cross);
 
         // 变异
         selected_chromos = mutate_chromos(&selected_chromos, &p_mutate);
+        chromos = selected_chromos;
+        chromos.append(&mut elite_chromos);
         now_iterate += 1;
         print!("迭代次数: {}/{}", now_iterate, max_iterate);
     }
@@ -100,10 +103,10 @@ fn mutate_chromos(
                 while pos1 == pos2 {
                     pos2 = rng.gen_range(0..ps.len());
                 }
-                println!("交换前的PS: {:?}", ps);
-                println!("交换位置索引: pos1 = {}, pos2 = {}", pos1, pos2);
+                // println!("交换前的PS: {:?}", ps);
+                // println!("交换位置索引: pos1 = {}, pos2 = {}", pos1, pos2);
                 ps.swap(pos1, pos2);
-                println!("交换后的PS: {:?}", ps);
+                // println!("交换后的PS: {:?}", ps);
             }
         }
     }
@@ -116,7 +119,7 @@ fn cross_chromos(
     p_cross: &f64,
 ) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
     let mut return_chromos = Vec::with_capacity(chromos.len());
-    for i in (0..chromos.len()).step_by(2) {
+    for i in (0..chromos.len()-1).step_by(2) {
         let mut rng = rand::thread_rng();
         let random_number: f64 = rng.gen_range(0.0..1.0);
         if random_number <= *p_cross {
@@ -384,9 +387,9 @@ fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data
     for chromo in chromos.iter().take(size_chromos - 1) {
         // 为当前 chromo 创建一个调度表
         let schedule = create_schedule(chromo, &data);
-
-        // 找到调度表中第六列的最大值
-        let max_value = schedule.iter().map(|row| row[5]).max().unwrap();
+        // println!("{:?}", schedule);
+        // 找到调度表中第五列的最大值
+        let max_value = schedule.iter().map(|row| row[4]).max().unwrap();
 
         // 将最大值添加到 fitness 向量中
         fitness.push(max_value);
