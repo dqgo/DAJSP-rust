@@ -20,7 +20,7 @@ pub struct Data {
 
 fn main() {
     // ------------系列----------
-    let popu = 1_;
+    let popu = 10_;
     let max_iterate = 1;
     let mut now_iterate = 0;
     let p_cross = 0.45;
@@ -44,20 +44,19 @@ fn main() {
 
     //开始迭代
     while now_iterate < max_iterate {
-
         // 计算适应度
         let fitness: Vec<i32> = calc_fitness(&chromos, &data);
         // let the_best_fitness = fitness.iter().min().unwrap();
         // let the_best_chromo = chromos[fitness.iter().position(|&r| r == *the_best_fitness).unwrap()].clone();
 
         // 选择
-        let (elite_chromos, mut selected_chromos)=select(& mut chromos, &fitness, &p_elite);
+        let (elite_chromos, mut selected_chromos) = select(&mut chromos, &fitness, &p_elite);
 
         // 交叉
-        selected_chromos=cross_chromos(&  selected_chromos, &p_cross);
+        selected_chromos = cross_chromos(&selected_chromos, &p_cross);
 
         // 变异
-        selected_chromos=mutate_chromos(&  selected_chromos, &p_mutate);
+        selected_chromos = mutate_chromos(&selected_chromos, &p_mutate);
         now_iterate += 1;
         print!("迭代次数: {}/{}", now_iterate, max_iterate);
     }
@@ -74,13 +73,16 @@ fn main() {
 //-------------变异----------------
 // 对FA向量应用单点随机突变算子，该算子用相关作业的不同工厂索引随机替换元素。
 // 此外，对PS和AS向量使用交换运算符，它随机交换编码向量的两个元素
-fn mutate_chromos(chromos : & Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, p_mutate: & f64)->Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
-    let mut return_chromos=chromos.clone();
+fn mutate_chromos(
+    chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    p_mutate: &f64,
+) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
+    let mut return_chromos = chromos.clone();
     for i in 0..chromos.len() {
         let mut rng = rand::thread_rng();
         let random_number: f64 = rng.gen_range(0.0..1.0);
         if random_number <= *p_mutate {
-            let chromo=& mut return_chromos[i];
+            let chromo = &mut return_chromos[i];
             // 变异FA
             let fa: &mut Vec<usize> = &mut chromo.0;
             let pos = rng.gen_range(0..fa.len());
@@ -103,18 +105,18 @@ fn mutate_chromos(chromos : & Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, p_mutat
                 ps.swap(pos1, pos2);
                 println!("交换后的PS: {:?}", ps);
             }
-            
         }
     }
     return_chromos
-
 }
 
 //-------------交叉----------------
-fn cross_chromos( chromos:  &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, p_cross:& f64 )->Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
+fn cross_chromos(
+    chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    p_cross: &f64,
+) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
     let mut return_chromos = Vec::with_capacity(chromos.len());
     for i in (0..chromos.len()).step_by(2) {
-
         let mut rng = rand::thread_rng();
         let random_number: f64 = rng.gen_range(0.0..1.0);
         if random_number <= *p_cross {
@@ -169,7 +171,7 @@ fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
             }
         }
     }
-    
+
     for (index, &gene) in p2.iter().enumerate() {
         if !children1.contains(&gene) {
             if let Some(pos) = children1.iter().position(|&x| x == 0) {
@@ -180,21 +182,30 @@ fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
 
     (children1, children2)
 }
-        
-
-
-
 
 //-------------选择----------------
-fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) -> (Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>) {
+fn select(
+    chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    fitness: &Vec<i32>,
+    p_elite: &f64,
+) -> (
+    Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+) {
     let total_fitness: i32 = fitness.iter().sum();
     let elite_num = (chromos.len() as f64 * p_elite) as usize;
 
     let mut elite_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
     let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
 
-    // Select elite chromosomes
-    elite_chromos.extend(chromos.iter().take(elite_num).cloned());
+    // Combine chromos and fitness into a single vector of tuples
+    let mut combined: Vec<(&(Vec<usize>, Vec<usize>, Vec<usize>), &i32)> = chromos.iter().zip(fitness.iter()).collect();
+
+    // Sort by fitness (ascending order)
+    combined.sort_by_key(|&(_, fit)| fit);
+
+    // Select elite chromosomes (with the smallest fitness values)
+    elite_chromos.extend(combined.iter().take(elite_num).map(|&(chromo, _)| chromo.clone()));
 
     // Select remaining chromosomes using roulette wheel selection
     let mut rng = rand::thread_rng();
@@ -206,39 +217,41 @@ fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec
             cumulative_fitness += fitness[index];
             index += 1;
         }
-        selected_chromos.push(chromos[index - 1].clone());
+        if index > 0 {
+            selected_chromos.push(chromos[index - 1].clone());
+        }
     }
 
     (elite_chromos, selected_chromos)
     // fn select(chromos:& mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,fitness:&Vec<i32>,p_elite:&f64){
-//     //-------------选择----------------
-//     fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) {
-//         let total_fitness: i32 = fitness.iter().sum();
-//         let elite_num = (chromos.len() as f64 * p_elite) as usize;
+    //     //-------------选择----------------
+    //     fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) {
+    //         let total_fitness: i32 = fitness.iter().sum();
+    //         let elite_num = (chromos.len() as f64 * p_elite) as usize;
 
-//         let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
+    //         let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
 
-//         // Select elite chromosomes
-//         let elite_chromos = chromos.iter().take(elite_num).cloned();
-//         selected_chromos.extend(elite_chromos);
+    //         // Select elite chromosomes
+    //         let elite_chromos = chromos.iter().take(elite_num).cloned();
+    //         selected_chromos.extend(elite_chromos);
 
-//         // Select remaining chromosomes using roulette wheel selection
-//         let mut rng = rand::thread_rng();
-//         let mut cumulative_fitness = 0;
-//         for _ in elite_num..chromos.len() {
-//             let random_fitness = rng.gen_range(0..total_fitness);
-//             let mut index = 0;
-//             while cumulative_fitness < random_fitness {
-//                 cumulative_fitness += fitness[index];
-//                 index += 1;
-//             }
-//             selected_chromos.push(chromos[index].clone());
-//         }
+    //         // Select remaining chromosomes using roulette wheel selection
+    //         let mut rng = rand::thread_rng();
+    //         let mut cumulative_fitness = 0;
+    //         for _ in elite_num..chromos.len() {
+    //             let random_fitness = rng.gen_range(0..total_fitness);
+    //             let mut index = 0;
+    //             while cumulative_fitness < random_fitness {
+    //                 cumulative_fitness += fitness[index];
+    //                 index += 1;
+    //             }
+    //             selected_chromos.push(chromos[index].clone());
+    //         }
 
-//         // Replace the original chromos with the selected chromos
-//         *chromos = selected_chromos;
-//     }
-// }
+    //         // Replace the original chromos with the selected chromos
+    //         *chromos = selected_chromos;
+    //     }
+    // }
 }
 
 // -------------生成数据----------------
@@ -320,7 +333,6 @@ fn combine_matrices(a: &Vec<Vec<i32>>, b: &Vec<Vec<i32>>) -> Vec<Vec<i32>> {
     c
 }
 
-
 //-------------生成初始解----------------
 pub fn create_initial_popus(popu: usize, data: &Data) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
     let mut chromos = vec![(vec![], vec![], vec![]); popu];
@@ -353,23 +365,34 @@ fn create_initial_popu(mach_num: usize, workpiece_num: usize) -> Vec<usize> {
     initial_popu
 }
 
-
 //-------------计算适应度----------------
 fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
     let size_chromos = chromos.len();
     // let mut fitness: Vec<i32> = vec![0; size_chromos];
-    let fitness: Vec<i32> = chromos
-        .iter()
-        .take(size_chromos - 1)
-        .map(|chromo| {
-            let schedule = create_schedule(chromo, &data);
-            schedule.iter().map(|row| row[5]).max().unwrap()
-        })
-        .collect();
+    // let fitness: Vec<i32> = chromos
+    //     .iter()
+    //     .take(size_chromos - 1)
+    //     .map(|chromo| {
+    //         let schedule = create_schedule(chromo, &data);
+    //         schedule.iter().map(|row| row[5]).max().unwrap()
+    //     })
+    //     .collect();
+    // 创建一个空的 fitness 向量
+    let mut fitness: Vec<i32> = Vec::new();
+
+    // 遍历 chromos 向量中的每个元素，直到倒数第二个元素
+    for chromo in chromos.iter().take(size_chromos - 1) {
+        // 为当前 chromo 创建一个调度表
+        let schedule = create_schedule(chromo, &data);
+
+        // 找到调度表中第六列的最大值
+        let max_value = schedule.iter().map(|row| row[5]).max().unwrap();
+
+        // 将最大值添加到 fitness 向量中
+        fitness.push(max_value);
+    }
     fitness
 }
-
-
 
 //-------------生成调度----------------
 fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -> Vec<Vec<i32>> {
@@ -454,20 +477,26 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
             .iter()
             .map(|&new_index| reverse_mapping[&new_index])
             .collect();
-        
+
         let this_factory_job_num = this_factory_job.len();
         let this_factory_work_num = this_factory_work.len();
-        let mut sub_schedule = creatScheduleSubFactory(new_factory_data, new_factory_work, this_factory_job_num, this_factory_work_num);
+        let mut sub_schedule = creatScheduleSubFactory(
+            new_factory_data,
+            new_factory_work,
+            this_factory_job_num,
+            this_factory_work_num,
+        );
 
         // 将sub_schedule的工件号转换为原来的工件号
         for entry in &mut sub_schedule {
             entry[0] = reverse_mapping[&(entry[0] as usize)] as i32;
         }
         // 将工厂号、装配号、属性号添加到调度中
-        //schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配)]
+        //schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配) 9-10预留]
         for row in &mut sub_schedule {
-            row[5] = i as i32 + 1; 
-            row[6] = AS[row[0] as usize] as i32;
+            row[5] = i as i32 + 1;
+            // row[6] = AS[row[0] as usize] as i32;
+            row[6] = assembly[(row[0] -1)as usize] as i32;
             row[7] = 0;
         }
 
@@ -475,27 +504,41 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
     }
     //至此，得到没有装配的调度,现在来看装配工序
     // let mut schedule_only_assembly: Vec<Vec<Vec<i32>>> = vec![vec![-1; 8]; assembly_data.len()].iter().map(|_| vec![vec![0; 8]; 1]).collect();
-    let mut schedule_only_assembly=vec![vec![-1;8];assembly_data.len()];
+    let mut schedule_only_assembly = vec![vec![-1; 8]; assembly_data.len()];
     let mut assembly_can_start_time = vec![0; assembly_data.len()];
 
-    for i in 0.. assembly_data.len() {
+    for i in 0..assembly_data.len() {
         //找到每个装配工序的可以开始的时间
 
         //先找到该装备工序对应的所有工序
-        let same_assembly_work_schedule= schedule_withno_assembly.iter().filter(|&x| x[6]==(i+1) as i32 ).collect::<Vec<_>>();
-        assembly_can_start_time[i]=same_assembly_work_schedule.iter().map(|x| x[4]).max().unwrap();
+        let same_assembly_work_schedule = schedule_withno_assembly
+            .iter()
+            .filter(|&x| x[6] == (i + 1) as i32)
+            .collect::<Vec<_>>();
+        assembly_can_start_time[i] = same_assembly_work_schedule
+            .iter()
+            .map(|x| x[4])
+            .max()
+            .unwrap();
     }
     //进行装配车间调度
-    schedule_only_assembly=create_assembly_schedule(schedule_only_assembly,assembly_data,assembly_can_start_time);
+    schedule_only_assembly = create_assembly_schedule(
+        schedule_only_assembly,
+        assembly_data,
+        assembly_can_start_time,
+    );
     // let schedule=schedule_withno_assembly.extend(schedule_only_assembly);
     schedule_withno_assembly.extend(schedule_only_assembly);
     let schedule = schedule_withno_assembly;
     schedule
 }
 
-
 //-------------使用单机调度贪心算法生成装配调度----------------
-fn create_assembly_schedule(mut schedule_only_assembly: Vec<Vec<i32>>,assembly_data: &Vec<i32>,assembly_can_start_time: Vec<i32>) -> Vec<Vec<i32>> {
+fn create_assembly_schedule(
+    mut schedule_only_assembly: Vec<Vec<i32>>,
+    assembly_data: &Vec<i32>,
+    assembly_can_start_time: Vec<i32>,
+) -> Vec<Vec<i32>> {
     let n = assembly_can_start_time.len();
     let mut current_time = 0;
     let mut schedule = vec![vec![0; 3]; n]; // 第一列: 工件号, 第二列: 开工时间, 第三列: 完工时间
@@ -523,7 +566,10 @@ fn create_assembly_schedule(mut schedule_only_assembly: Vec<Vec<i32>>,assembly_d
         }
 
         // 选择加工时间最短的任务
-        let min_task = available_tasks.iter().min_by_key(|&&(_, _, duration)| duration).unwrap();
+        let min_task = available_tasks
+            .iter()
+            .min_by_key(|&&(_, _, duration)| duration)
+            .unwrap();
         let task_id = min_task.0;
         let start_time = current_time;
         let finish_time = current_time + min_task.2;
@@ -552,13 +598,18 @@ fn create_assembly_schedule(mut schedule_only_assembly: Vec<Vec<i32>>,assembly_d
 
 //-------------半主动生成子工厂调度----------------
 
-fn creatScheduleSubFactory(change_data: Vec<Vec<i32>>, chromo: Vec<usize>, workpiece_num: usize, mach_num: usize) -> Vec<Vec<i32>> {
+fn creatScheduleSubFactory(
+    change_data: Vec<Vec<i32>>,
+    chromo: Vec<usize>,
+    workpiece_num: usize,
+    mach_num: usize,
+) -> Vec<Vec<i32>> {
     let length_num = chromo.len();
     let mut schedule = vec![vec![0; 6]; length_num];
     let mut job_now_process = vec![0; workpiece_num];
     let mut job_now_can_start_time = vec![0; workpiece_num];
     let mut mach_can_start_time = vec![0; mach_num];
-    
+
     for i in 0..length_num {
         let job_id = chromo[i];
         job_now_process[job_id - 1] += 1;
@@ -567,15 +618,23 @@ fn creatScheduleSubFactory(change_data: Vec<Vec<i32>>, chromo: Vec<usize>, workp
 
         let job_can_start_time = job_now_can_start_time[job_id - 1];
         let this_mach_can_start_time = mach_can_start_time[mach_id - 1];
-        let start_time = if job_can_start_time > this_mach_can_start_time { job_can_start_time } else { this_mach_can_start_time };
+        let start_time = if job_can_start_time > this_mach_can_start_time {
+            job_can_start_time
+        } else {
+            this_mach_can_start_time
+        };
 
         // 已经完成插入，更新表单时间
         job_now_can_start_time[job_id - 1] = start_time + work_speed_time;
         mach_can_start_time[mach_id - 1] = start_time + work_speed_time;
-        schedule[i] = vec![job_id as i32, job_now_process[job_id - 1] as i32, mach_id as i32, start_time as i32, (start_time + work_speed_time) as i32, 0];
+        schedule[i] = vec![
+            job_id as i32,
+            job_now_process[job_id - 1] as i32,
+            mach_id as i32,
+            start_time as i32,
+            (start_time + work_speed_time) as i32,
+            0,0,0,0,0
+        ];
     }
     schedule
 }
-
-
-
