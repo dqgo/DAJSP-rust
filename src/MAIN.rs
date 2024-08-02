@@ -1,5 +1,5 @@
 #![allow(warnings)]
-
+use crossbeam::scope;
 use plotters::data;
 use rand::seq::SliceRandom;
 use rand::Rng;
@@ -20,8 +20,8 @@ pub struct Data {
 
 fn main() {
     // ------------系列----------
-    let popu = 10_000;
-    let max_iterate = 10;
+    let popu = 2__;
+    let max_iterate = 200;
     let mut now_iterate = 0;
     let p_cross = 0.45;
     let mut p_mutate = 0.05;
@@ -46,7 +46,8 @@ fn main() {
     while now_iterate < max_iterate {
         // 计算适应度
         let fitness: Vec<i32> = calc_fitness(&chromos, &data); 
-        println!("适应度: {:?}", &fitness[1..5]);
+        // let fitness: Vec<i32> = calc_fitness_thread(&chromos, &data);
+        // println!("适应度: {:?}", &fitness[1..5]);
         let the_best_fitness = fitness.iter().min().unwrap();
         let the_best_chromo = chromos[fitness.iter().position(|&r| r == *the_best_fitness).unwrap()].clone();
         // println!("当前最优适应度: {}", the_best_fitness);
@@ -57,16 +58,17 @@ fn main() {
         selected_chromos = cross_chromos(&selected_chromos, &p_cross);
 
         // 变异
-        selected_chromos = mutate_chromos(&selected_chromos, &p_mutate);
+        selected_chromos = mutate_chromos(&selected_chromos, &p_mutate,&data.factory_num);
         chromos = selected_chromos;
         chromos.append(&mut elite_chromos);
         now_iterate += 1;
         print!("迭代次数: {}/{}", now_iterate, max_iterate);
+        println!(" chromos[0]= {:?}", chromos[0]);
     }
     // 结束计时
     let duration = start.elapsed();
     println!("代码执行时间: {:#?}", duration);
-
+    
     // 等待用户输入以保持窗口打开
     println!("按回车键退出...");
     let mut input = String::new();
@@ -79,8 +81,10 @@ fn main() {
 fn mutate_chromos(
     chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
     p_mutate: &f64,
+    factory_num: &usize,
 ) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
     let mut return_chromos = chromos.clone();
+    // let factory_num=chromos[0].0.iter().max().unwrap();
     for i in 0..chromos.len() {
         let mut rng = rand::thread_rng();
         let random_number: f64 = rng.gen_range(0.0..1.0);
@@ -92,8 +96,9 @@ fn mutate_chromos(
             let current_factory = fa[pos];
             let mut new_factory = current_factory;
             while new_factory == current_factory {
-                new_factory = rng.gen_range(0..fa.len());
+                new_factory = rng.gen_range(1..=*factory_num);
             }
+            // assert!(current_factory == 1 || current_factory == 2);
             fa[pos] = new_factory;
             // 变异PS
             let ps = &mut chromo.1;
@@ -130,6 +135,12 @@ fn cross_chromos(
             let p2_fa = &p2.0;
             let p2_ps = &p2.1;
             let (c1_fa, c2_fa) = pox(p1_fa, p2_fa);
+            //当c1_fa和c2_fa中有元素为0，崩溃
+            if c1_fa.contains(&0) || c2_fa.contains(&0){
+                println!("c1_fa: {:?}, c2_fa: {:?}", c1_fa, c2_fa);
+                eprintln!("c1_fa or c2_fa contains 0");
+                std::process::exit(1);
+            }
             let (c1_ps, c2_ps) = pox(p1_ps, p2_ps);
             let c1 = (c1_fa, c1_ps, p1.2.clone());
             let c2 = (c2_fa, c2_ps, p2.2.clone());
@@ -143,17 +154,27 @@ fn cross_chromos(
     return_chromos
 }
 
+// POX gpt版本 有错
 fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
     let mut rng = rand::thread_rng();
     let len_of_chromosome = p1.len();
     let mut children1 = vec![0; len_of_chromosome];
     let mut children2 = vec![0; len_of_chromosome];
 
-    let num_j1 = rng.gen_range(1..=len_of_chromosome);
-    let mut j: Vec<usize> = (1..=len_of_chromosome).collect();
+    // 随机选择一些基因
+    let work_num=p1.iter().max().unwrap();
+    let num_j1 = rng.gen_range(1..=*work_num);
+    let mut j: Vec<usize> = (1..=*work_num).collect();
     j.shuffle(&mut rng);
     let j1: Vec<usize> = j.iter().take(num_j1).cloned().collect();
 
+    // 打印 p1 和 p2
+    println!("p1: {:?}", p1);
+    println!("p2: {:?}", p2);
+    // 打印交换的工件集
+    println!("交换的工件集: {:?}", j1);
+
+    // 直接复制到子代染色体中
     for &job in &j1 {
         for (index, &gene) in p1.iter().enumerate() {
             if gene == job {
@@ -167,24 +188,75 @@ fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
         }
     }
 
-    for (index, &gene) in p1.iter().enumerate() {
-        if !children2.contains(&gene) {
-            if let Some(pos) = children2.iter().position(|&x| x == 0) {
-                children2[pos] = gene;
+    // 填充剩余的基因
+    let mut remaining_genes1: Vec<usize> = p1.iter().filter(|&&gene| !children2.contains(&gene)).cloned().collect();
+    let mut remaining_genes2: Vec<usize> = p2.iter().filter(|&&gene| !children1.contains(&gene)).cloned().collect();
+
+    for gene in &mut children2 {
+        if *gene == 0 {
+            if let Some(next_gene) = remaining_genes1.pop() {
+                *gene = next_gene;
             }
         }
     }
 
-    for (index, &gene) in p2.iter().enumerate() {
-        if !children1.contains(&gene) {
-            if let Some(pos) = children1.iter().position(|&x| x == 0) {
-                children1[pos] = gene;
+    for gene in &mut children1 {
+        if *gene == 0 {
+            if let Some(next_gene) = remaining_genes2.pop() {
+                *gene = next_gene;
             }
         }
     }
+
+    // 打印 c1 和 c2
+    println!("c1: {:?}", children1);
+    println!("c2: {:?}", children2);
 
     (children1, children2)
 }
+
+// fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
+//     let mut rng = rand::thread_rng();
+//     let len_of_chromosome = p1.len();
+//     let mut children1 = vec![0; len_of_chromosome];
+//     let mut children2 = vec![0; len_of_chromosome];
+
+//     let num_j1 = rng.gen_range(1..=len_of_chromosome);
+//     let mut j: Vec<usize> = (1..=len_of_chromosome).collect();
+//     j.shuffle(&mut rng);
+//     let j1: Vec<usize> = j.iter().take(num_j1).cloned().collect();
+
+//     for &job in &j1 {
+//         for (index, &gene) in p1.iter().enumerate() {
+//             if gene == job {
+//                 children1[index] = gene;
+//             }
+//         }
+//         for (index, &gene) in p2.iter().enumerate() {
+//             if gene == job {
+//                 children2[index] = gene;
+//             }
+//         }
+//     }
+
+//     for (index, &gene) in p1.iter().enumerate() {
+//         if !children2.contains(&gene) {
+//             if let Some(pos) = children2.iter().position(|&x| x == 0) {
+//                 children2[pos] = gene;
+//             }
+//         }
+//     }
+
+//     for (index, &gene) in p2.iter().enumerate() {
+//         if !children1.contains(&gene) {
+//             if let Some(pos) = children1.iter().position(|&x| x == 0) {
+//                 children1[pos] = gene;
+//             }
+//         }
+//     }
+
+//     (children1, children2)
+// }
 
 //-------------选择----------------
 fn select(
@@ -371,16 +443,7 @@ fn create_initial_popu(mach_num: usize, workpiece_num: usize) -> Vec<usize> {
 //-------------计算适应度----------------
 fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
     let size_chromos = chromos.len();
-    // let mut fitness: Vec<i32> = vec![0; size_chromos];
-    // let fitness: Vec<i32> = chromos
-    //     .iter()
-    //     .take(size_chromos - 1)
-    //     .map(|chromo| {
-    //         let schedule = create_schedule(chromo, &data);
-    //         schedule.iter().map(|row| row[5]).max().unwrap()
-    //     })
-    //     .collect();
-    // 创建一个空的 fitness 向量
+
     let mut fitness: Vec<i32> = Vec::new();
 
     // 遍历 chromos 向量中的每个元素，直到倒数第二个元素
@@ -396,6 +459,34 @@ fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data
     }
     fitness
 }
+//-------------计算适应度，多线程版----------------
+fn calc_fitness_thread(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
+    let size_chromos = chromos.len();
+    let mut fitness: Vec<i32> = Vec::with_capacity(size_chromos - 1);
+
+    scope(|s| {
+        let mut handles = vec![];
+
+        for chromo in chromos.iter().take(size_chromos - 1) {
+            let data = data.clone(); // 假设 Data 实现了 Clone trait
+            let chromo = chromo.clone(); // 假设 chromo 元素实现了 Clone trait
+
+            let handle = s.spawn(move |_| {
+                let schedule = create_schedule(&chromo, &data);
+                let max_value = schedule.iter().map(|row| row[4]).max().unwrap();
+                max_value
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            fitness.push(handle.join().unwrap());
+        }
+    }).unwrap();
+
+    fitness
+}
 
 //-------------生成调度----------------
 fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -> Vec<Vec<i32>> {
@@ -408,6 +499,7 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
     let assembly_data = &data.assembly_data;
     let change_data = &data.change_data;
     let FS = &chromo.0;
+    // println!("FS: {:?}", FS);
     let PS = &chromo.1;
     let AS = &chromo.2;
 
@@ -417,9 +509,13 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
 
     // 首先分割为数个JSP问题，分割工厂分配
     for i in 0..job_num {
+        // println!("FSi[0]: {:?},FSi[1]: {:?}",FSi[0],FSi[1]);
+        if (FS[i] - 1)<0||(FS[i] - 1)>=factory_num{
+            println!("ERROR!!!!!!!!! FS[{}] is {:?},FS={:?},chromo={:?}",i,FS[i],FS,&chromo);
+        }
         FSi[FS[i] - 1].push(i + 1);
+        
     }
-
     // 分割工序分配
     for i in 0..factory_num {
         PSi[i] = PS
@@ -481,14 +577,21 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
             .map(|&new_index| reverse_mapping[&new_index])
             .collect();
 
-        let this_factory_job_num = this_factory_job.len();
-        let this_factory_work_num = this_factory_work.len();
-        let mut sub_schedule = creatScheduleSubFactory(
-            new_factory_data,
-            new_factory_work,
-            this_factory_job_num,
-            this_factory_work_num,
-        );
+            let this_factory_job_num = this_factory_job.len();
+            let this_factory_mach_num: usize;
+            
+            if this_factory_job_num == 0 {
+                this_factory_mach_num = 0;
+            } else {
+                this_factory_mach_num = this_factory_work.len() / this_factory_job_num;
+            }
+            
+            let mut sub_schedule = creatScheduleSubFactory(
+                new_factory_data,
+                new_factory_work,
+                this_factory_job_num,
+                this_factory_mach_num,
+            );
 
         // 将sub_schedule的工件号转换为原来的工件号
         for entry in &mut sub_schedule {
@@ -620,6 +723,9 @@ fn creatScheduleSubFactory(
         let work_speed_time = change_data[job_id - 1][2 * job_now_process[job_id - 1] - 1];
 
         let job_can_start_time = job_now_can_start_time[job_id - 1];
+        if mach_id-1<0||mach_id-1>=mach_num{
+            println!("ERROR!!!!!!!!! mach_id-1 is 0,mach_id-1={:?}",mach_id-1);
+        }
         let this_mach_can_start_time = mach_can_start_time[mach_id - 1];
         let start_time = if job_can_start_time > this_mach_can_start_time {
             job_can_start_time
