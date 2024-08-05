@@ -45,12 +45,62 @@ fn main() {
 
     //开始迭代
     while now_iterate < max_iterate {
+        //禁忌搜索
+        // 创建一个Arc<Mutex<Vec<...>>>来共享chromos
+        let shared_chromos = Arc::new(Mutex::new(chromos));
+
+        // 使用rayon进行并行计算
+        (0..popu).into_par_iter().for_each(|i| {
+            let shared_chromos = Arc::clone(&shared_chromos);
+            let data = data.clone(); // 假设data可以被克隆
+            let result = tube_search(
+                &shared_chromos.lock().unwrap(),
+                &data,
+                tube_length,
+                tube_threshold,
+            );
+            shared_chromos.lock().unwrap()[i] = result;
+        });
+
+        // 解锁并获取更新后的chromos
+        chromos = Arc::try_unwrap(shared_chromos).unwrap().into_inner().unwrap();
+        // 创建一个Arc<Mutex<Vec<...>>>来共享chromos
+        // let shared_chromos = Arc::new(Mutex::new(chromos));
+
+        // // 创建一个线程向量来存储所有线程
+        // let mut handles = vec![];
+
+        // for i in 0..popu {
+        //     // 克隆Arc指针以在多个线程之间共享
+        //     let shared_chromos = Arc::clone(&shared_chromos);
+        //     let data = data.clone(); // 假设data可以被克隆
+        //     let handle = thread::spawn(move || {
+        //         let result = tube_search(
+        //             &shared_chromos.lock().unwrap(),
+        //             &data,
+        //             tube_length,
+        //             tube_threshold,
+        //         );
+        //         shared_chromos.lock().unwrap()[i] = result;
+        //     });
+        //     handles.push(handle);
+        // }
+
+        // // 等待所有线程完成
+        // for handle in handles {
+        //     handle.join().unwrap();
+        // }
+
         // 计算适应度
-        let fitness: Vec<i32> = calc_fitness(&chromos, &data); 
+        let fitness: Vec<i32> = calc_fitness(&chromos, &data);
         // let fitness: Vec<i32> = calc_fitness_thread(&chromos, &data);
         // println!("适应度: {:?}", &fitness[1..5]);
         let the_best_fitness = fitness.iter().min().unwrap();
-        let the_best_chromo = chromos[fitness.iter().position(|&r| r == *the_best_fitness).unwrap()].clone();
+        let the_best_chromo = chromos[fitness
+            .iter()
+            .position(|&r| r == *the_best_fitness)
+            .unwrap()]
+        .clone();
         println!("当前最优适应度: {}", the_best_fitness);
         // 选择
         let (mut elite_chromos, mut selected_chromos) = select(&mut chromos, &fitness, &p_elite);
@@ -60,7 +110,7 @@ fn main() {
         selected_chromos = cross_chromos(&selected_chromos, &p_cross);
 
         // 变异
-        selected_chromos = mutate_chromos(&selected_chromos, &p_mutate,&data.factory_num);
+        selected_chromos = mutate_chromos(&selected_chromos, &p_mutate, &data.factory_num);
         chromos = selected_chromos;
         chromos.append(&mut elite_chromos);
         now_iterate += 1;
@@ -70,11 +120,53 @@ fn main() {
     // 结束计时
     let duration = start.elapsed();
     println!("代码执行时间: {:#?}", duration);
-    
+
     // 等待用户输入以保持窗口打开
     println!("按回车键退出...");
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
+}
+
+
+
+//-------------禁忌搜索----------------
+fn tube_search(
+    chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    data: &Vec<i32>,
+    tube_length: usize,
+    tube_threshold: i32,
+) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut best_chromo = chromos[0].clone();
+    let mut best_fitness = 9999;
+    let mut tube: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
+    let mut tube_fitness: Vec<i32> = Vec::new();
+    let mut now_iterate = 0;
+    let mut now_threshold = 0;
+    while now_threshold < tube_threshold {
+        let mut new_chromo = chromos[0].clone();
+        let mut new_fitness = calc_fitness(&vec![new_chromo.clone()], &data)[0];
+        for chromo in chromos {
+            let fitness = calc_fitness(&vec![chromo.clone()], &data)[0];
+            if fitness < new_fitness {
+                new_chromo = chromo.clone();
+                new_fitness = fitness;
+            }
+        }
+        if new_fitness < best_fitness {
+            best_chromo = new_chromo.clone();
+            best_fitness = new_fitness;
+            now_threshold = 0;
+        }
+        tube.push(new_chromo.clone());
+        tube_fitness.push(new_fitness);
+        if tube.len() > tube_length {
+            tube.remove(0);
+            tube_fitness.remove(0);
+        }
+        now_threshold += 1;
+        now_iterate += 1;
+    }
+    best_chromo
 }
 
 //-------------变异----------------
@@ -126,7 +218,7 @@ fn cross_chromos(
     p_cross: &f64,
 ) -> Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> {
     let mut return_chromos = Vec::with_capacity(chromos.len());
-    for i in (0..chromos.len()-1).step_by(2) {
+    for i in (0..chromos.len() - 1).step_by(2) {
         let mut rng = rand::thread_rng();
         let random_number: f64 = rng.gen_range(0.0..1.0);
         if random_number <= *p_cross {
@@ -161,25 +253,25 @@ fn cross_chromos(
 fn pox_2(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
     // 初始化随机数生成器
     let mut rng = rand::thread_rng();
-    
+
     // 获取染色体长度
     let len_of_chromosome = p1.len();
-    
+
     // 初始化子代染色体
     let mut c1 = vec![0; len_of_chromosome];
     let mut c2 = vec![0; len_of_chromosome];
-    
+
     // 获取工件集 J
     let max_value = *p1.iter().max().unwrap();
     let j: Vec<usize> = (1..=max_value).collect();
-    
+
     // 从 J 中随机选取几位构成 J1，其余的构成 J2
     let num_j1 = rng.gen_range(1..=j.len());
     let mut shuffled_j = j.clone();
     shuffled_j.shuffle(&mut rng);
     let j1: Vec<usize> = shuffled_j.iter().take(num_j1).cloned().collect();
     let j2: Vec<usize> = shuffled_j.iter().skip(num_j1).cloned().collect();
-    
+
     // 打印 p1 p2 J1 和 J2
     // println!("p1: {:?}", p1);
     // println!("p2: {:?}", p2);
@@ -229,33 +321,30 @@ fn pox_2(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
     (c1, c2)
 }
 
-
-
 // dqgo:gpt性能优化
-
 
 // fn pox_gpt_inseaces(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
 //     // 初始化随机数生成器
 //     let mut rng = rand::thread_rng();
-    
+
 //     // 获取染色体长度
 //     let len_of_chromosome = p1.len();
-    
+
 //     // 初始化子代染色体
 //     let mut c1 = vec![0; len_of_chromosome];
 //     let mut c2 = vec![0; len_of_chromosome];
-    
+
 //     // 获取工件集 J
 //     let max_value = *p1.iter().max().unwrap();
 //     let j: Vec<usize> = (1..=max_value).collect();
-    
+
 //     // 从 J 中随机选取几位构成 J1，其余的构成 J2
 //     let num_j1 = rng.gen_range(1..=j.len());
 //     let mut shuffled_j = j.clone();
 //     shuffled_j.shuffle(&mut rng);
 //     let j1: HashSet<usize> = shuffled_j.iter().take(num_j1).cloned().collect();
 //     let j2: HashSet<usize> = shuffled_j.iter().skip(num_j1).cloned().collect();
-    
+
 //     // 打印 J1 和 J2
 //     println!("J1: {:?}", j1);
 //     println!("J2: {:?}", j2);
@@ -302,8 +391,6 @@ fn pox_2(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
 
 //     (c1, c2)
 // }
-
-
 
 // POX gpt版本 有错
 // fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
@@ -424,13 +511,19 @@ fn select(
     let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
 
     // Combine chromos and fitness into a single vector of tuples
-    let mut combined: Vec<(&(Vec<usize>, Vec<usize>, Vec<usize>), &i32)> = chromos.iter().zip(fitness.iter()).collect();
+    let mut combined: Vec<(&(Vec<usize>, Vec<usize>, Vec<usize>), &i32)> =
+        chromos.iter().zip(fitness.iter()).collect();
 
     // Sort by fitness (ascending order)
     combined.sort_by_key(|&(_, fit)| fit);
 
     // Select elite chromosomes (with the smallest fitness values)
-    elite_chromos.extend(combined.iter().take(elite_num).map(|&(chromo, _)| chromo.clone()));
+    elite_chromos.extend(
+        combined
+            .iter()
+            .take(elite_num)
+            .map(|&(chromo, _)| chromo.clone()),
+    );
 
     // Calculate the inverse of fitness values
     let max_fitness = *fitness.iter().max().unwrap();
@@ -454,7 +547,6 @@ fn select(
 
     (elite_chromos, selected_chromos)
 }
-
 
 // //-------------选择----------------
 // fn select(
@@ -496,35 +588,35 @@ fn select(
 //     }
 
 //     (elite_chromos, selected_chromos)
-    // fn select(chromos:& mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,fitness:&Vec<i32>,p_elite:&f64){
-    //     //-------------选择----------------
-    //     fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) {
-    //         let total_fitness: i32 = fitness.iter().sum();
-    //         let elite_num = (chromos.len() as f64 * p_elite) as usize;
+// fn select(chromos:& mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,fitness:&Vec<i32>,p_elite:&f64){
+//     //-------------选择----------------
+//     fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) {
+//         let total_fitness: i32 = fitness.iter().sum();
+//         let elite_num = (chromos.len() as f64 * p_elite) as usize;
 
-    //         let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
+//         let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
 
-    //         // Select elite chromosomes
-    //         let elite_chromos = chromos.iter().take(elite_num).cloned();
-    //         selected_chromos.extend(elite_chromos);
+//         // Select elite chromosomes
+//         let elite_chromos = chromos.iter().take(elite_num).cloned();
+//         selected_chromos.extend(elite_chromos);
 
-    //         // Select remaining chromosomes using roulette wheel selection
-    //         let mut rng = rand::thread_rng();
-    //         let mut cumulative_fitness = 0;
-    //         for _ in elite_num..chromos.len() {
-    //             let random_fitness = rng.gen_range(0..total_fitness);
-    //             let mut index = 0;
-    //             while cumulative_fitness < random_fitness {
-    //                 cumulative_fitness += fitness[index];
-    //                 index += 1;
-    //             }
-    //             selected_chromos.push(chromos[index].clone());
-    //         }
+//         // Select remaining chromosomes using roulette wheel selection
+//         let mut rng = rand::thread_rng();
+//         let mut cumulative_fitness = 0;
+//         for _ in elite_num..chromos.len() {
+//             let random_fitness = rng.gen_range(0..total_fitness);
+//             let mut index = 0;
+//             while cumulative_fitness < random_fitness {
+//                 cumulative_fitness += fitness[index];
+//                 index += 1;
+//             }
+//             selected_chromos.push(chromos[index].clone());
+//         }
 
-    //         // Replace the original chromos with the selected chromos
-    //         *chromos = selected_chromos;
-    //     }
-    // }
+//         // Replace the original chromos with the selected chromos
+//         *chromos = selected_chromos;
+//     }
+// }
 // }
 
 // -------------生成数据----------------
@@ -660,7 +752,10 @@ fn calc_fitness(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data
     fitness
 }
 //-------------计算适应度，多线程版----------------
-fn calc_fitness_thread(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data: &Data) -> Vec<i32> {
+fn calc_fitness_thread(
+    chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    data: &Data,
+) -> Vec<i32> {
     let size_chromos = chromos.len();
     let mut fitness: Vec<i32> = Vec::with_capacity(size_chromos - 1);
 
@@ -683,7 +778,8 @@ fn calc_fitness_thread(chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, data
         for handle in handles {
             fitness.push(handle.join().unwrap());
         }
-    }).unwrap();
+    })
+    .unwrap();
 
     fitness
 }
@@ -710,11 +806,13 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
     // 首先分割为数个JSP问题，分割工厂分配
     for i in 0..job_num {
         // println!("FSi[0]: {:?},FSi[1]: {:?}",FSi[0],FSi[1]);
-        if (FS[i] - 1)<0||(FS[i] - 1)>=factory_num{
-            println!("ERROR!!!!!!!!! FS[{}] is {:?},FS={:?},chromo={:?}",i,FS[i],FS,&chromo);
+        if (FS[i] - 1) < 0 || (FS[i] - 1) >= factory_num {
+            println!(
+                "ERROR!!!!!!!!! FS[{}] is {:?},FS={:?},chromo={:?}",
+                i, FS[i], FS, &chromo
+            );
         }
         FSi[FS[i] - 1].push(i + 1);
-        
     }
     // 分割工序分配
     for i in 0..factory_num {
@@ -777,21 +875,21 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
             .map(|&new_index| reverse_mapping[&new_index])
             .collect();
 
-            let this_factory_job_num = this_factory_job.len();
-            let this_factory_mach_num: usize;
-            
-            if this_factory_job_num == 0 {
-                this_factory_mach_num = 0;
-            } else {
-                this_factory_mach_num = this_factory_work.len() / this_factory_job_num;
-            }
-            
-            let mut sub_schedule = creatScheduleSubFactory(
-                new_factory_data,
-                new_factory_work,
-                this_factory_job_num,
-                this_factory_mach_num,
-            );
+        let this_factory_job_num = this_factory_job.len();
+        let this_factory_mach_num: usize;
+
+        if this_factory_job_num == 0 {
+            this_factory_mach_num = 0;
+        } else {
+            this_factory_mach_num = this_factory_work.len() / this_factory_job_num;
+        }
+
+        let mut sub_schedule = creatScheduleSubFactory(
+            new_factory_data,
+            new_factory_work,
+            this_factory_job_num,
+            this_factory_mach_num,
+        );
 
         // 将sub_schedule的工件号转换为原来的工件号
         for entry in &mut sub_schedule {
@@ -802,7 +900,7 @@ fn create_schedule(chromo: &(Vec<usize>, Vec<usize>, Vec<usize>), data: &Data) -
         for row in &mut sub_schedule {
             row[5] = i as i32 + 1;
             // row[6] = AS[row[0] as usize] as i32;
-            row[6] = assembly[(row[0] -1)as usize] as i32;
+            row[6] = assembly[(row[0] - 1) as usize] as i32;
             row[7] = 0;
         }
 
@@ -923,8 +1021,8 @@ fn creatScheduleSubFactory(
         let work_speed_time = change_data[job_id - 1][2 * job_now_process[job_id - 1] - 1];
 
         let job_can_start_time = job_now_can_start_time[job_id - 1];
-        if mach_id-1<0||mach_id-1>=mach_num{
-            println!("ERROR!!!!!!!!! mach_id-1 is 0,mach_id-1={:?}",mach_id-1);
+        if mach_id - 1 < 0 || mach_id - 1 >= mach_num {
+            println!("ERROR!!!!!!!!! mach_id-1 is 0,mach_id-1={:?}", mach_id - 1);
         }
         let this_mach_can_start_time = mach_can_start_time[mach_id - 1];
         let start_time = if job_can_start_time > this_mach_can_start_time {
@@ -942,10 +1040,12 @@ fn creatScheduleSubFactory(
             mach_id as i32,
             start_time as i32,
             (start_time + work_speed_time) as i32,
-            0,0,0,0,0
+            0,
+            0,
+            0,
+            0,
+            0,
         ];
     }
     schedule
 }
-
-
