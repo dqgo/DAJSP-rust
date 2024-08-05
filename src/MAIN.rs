@@ -1,14 +1,17 @@
 #![allow(warnings)]
 use crossbeam::scope;
+use crossbeam::thread::ScopedThreadBuilder;
 use plotters::data;
 use rand::seq::SliceRandom;
 use rand::Rng;
+use rayon::prelude::*;
 use rayon::vec;
 use std::collections::HashMap;
 use std::io;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-#[derive(Debug)]
 
+#[derive(Debug, Clone)]
 pub struct Data {
     change_data: Vec<Vec<i32>>,
     job_num: usize,
@@ -45,51 +48,34 @@ fn main() {
 
     //开始迭代
     while now_iterate < max_iterate {
-        //禁忌搜索
+        // 禁忌搜索
         // 创建一个Arc<Mutex<Vec<...>>>来共享chromos
         let shared_chromos = Arc::new(Mutex::new(chromos));
 
         // 使用rayon进行并行计算
         (0..popu).into_par_iter().for_each(|i| {
             let shared_chromos = Arc::clone(&shared_chromos);
-            let data = data.clone(); // 假设data可以被克隆
-            let result = tube_search(
-                &shared_chromos.lock().unwrap(),
-                &data,
-                tube_length,
-                tube_threshold,
-            );
-            shared_chromos.lock().unwrap()[i] = result;
+            let data = data.clone(); // data可以被克隆
+
+            // 锁定并获取单个染色体
+            let mut chromo = {
+                let mut chromos = shared_chromos.lock().unwrap();
+                chromos[i].clone()
+            };
+
+            // 传递单个染色体
+            let result = tube_search(&mut chromo, &data, tube_length, tube_threshold);
+
+            // 更新单个染色体
+            let mut chromos = shared_chromos.lock().unwrap();
+            chromos[i] = result;
         });
 
         // 解锁并获取更新后的chromos
-        chromos = Arc::try_unwrap(shared_chromos).unwrap().into_inner().unwrap();
-        // 创建一个Arc<Mutex<Vec<...>>>来共享chromos
-        // let shared_chromos = Arc::new(Mutex::new(chromos));
-
-        // // 创建一个线程向量来存储所有线程
-        // let mut handles = vec![];
-
-        // for i in 0..popu {
-        //     // 克隆Arc指针以在多个线程之间共享
-        //     let shared_chromos = Arc::clone(&shared_chromos);
-        //     let data = data.clone(); // 假设data可以被克隆
-        //     let handle = thread::spawn(move || {
-        //         let result = tube_search(
-        //             &shared_chromos.lock().unwrap(),
-        //             &data,
-        //             tube_length,
-        //             tube_threshold,
-        //         );
-        //         shared_chromos.lock().unwrap()[i] = result;
-        //     });
-        //     handles.push(handle);
-        // }
-
-        // // 等待所有线程完成
-        // for handle in handles {
-        //     handle.join().unwrap();
-        // }
+        chromos = Arc::try_unwrap(shared_chromos)
+            .unwrap()
+            .into_inner()
+            .unwrap();
 
         // 计算适应度
         let fitness: Vec<i32> = calc_fitness(&chromos, &data);
@@ -127,44 +113,50 @@ fn main() {
     io::stdin().read_line(&mut input).unwrap();
 }
 
-
-
 //-------------禁忌搜索----------------
 fn tube_search(
-    chromos: &Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
-    data: &Vec<i32>,
+    chromo: &(Vec<usize>, Vec<usize>, Vec<usize>),
+    data: &Data,
     tube_length: usize,
-    tube_threshold: i32,
+    tube_iter: i32,
 ) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-    let mut best_chromo = chromos[0].clone();
+    let mut best_chromo = chromo.clone();
     let mut best_fitness = 9999;
     let mut tube: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
     let mut tube_fitness: Vec<i32> = Vec::new();
     let mut now_iterate = 0;
     let mut now_threshold = 0;
-    while now_threshold < tube_threshold {
-        let mut new_chromo = chromos[0].clone();
-        let mut new_fitness = calc_fitness(&vec![new_chromo.clone()], &data)[0];
-        for chromo in chromos {
-            let fitness = calc_fitness(&vec![chromo.clone()], &data)[0];
-            if fitness < new_fitness {
-                new_chromo = chromo.clone();
-                new_fitness = fitness;
-            }
-        }
-        if new_fitness < best_fitness {
-            best_chromo = new_chromo.clone();
-            best_fitness = new_fitness;
-            now_threshold = 0;
-        }
-        tube.push(new_chromo.clone());
-        tube_fitness.push(new_fitness);
-        if tube.len() > tube_length {
-            tube.remove(0);
-            tube_fitness.remove(0);
-        }
+    while now_threshold < tube_iter {
+        //对当前染色体进行解码，生成shcedule
+        let schedule = create_schedule((chromo), data);
+        //对schedule进行右移，生成schedule_right
+        let Cmax=schedule.iter().map(|x| x[4]).max();
+        let schedule_right = create_schedule_right(&schedule, & Cmax);
+        //由schedule和schedule_right得到关键工序，并由此得到关键块
+        let (key_block, key_block_index) = create_key_block(&schedule, &schedule_right, data);
+        //由关键块对chromo进行N7邻域搜索，得到新的neighbor_chromos
+        let (neighbor_chromos, neighbor_schedule, neighbor_sign, PS_start_num) =
+            create_neighbor_chromos(
+                &chromo,
+                &schedule,
+                &schedule_right,
+                &key_block,
+                &key_block_index,
+                data,
+            );
+        //计算neighbor_chromos的适应度，使用近似评价方法
+
+        //选择适应度最好的neighbor_chromos，更新best_chromo和best_fitness
+
+        //更新chromo为不在禁忌表中的适应度最好的neighbor_chromos
+
+        //更新now_threshold和now_iterate
+
+        //如果best_fitness连续threshold次没有更新，则跳出循环
+
+        //更新禁忌表
+
         now_threshold += 1;
-        now_iterate += 1;
     }
     best_chromo
 }
