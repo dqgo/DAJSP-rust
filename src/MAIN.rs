@@ -130,8 +130,8 @@ fn tube_search(
         //对当前染色体进行解码，生成shcedule
         let schedule = create_schedule((chromo), data);
         //对schedule进行右移，生成schedule_right
-        let Cmax=schedule.iter().map(|x| x[4]).max();
-        let schedule_right = create_schedule_right(&schedule, & Cmax);
+        let Cmax = schedule.iter().map(|x| x[4]).max().unwrap();
+        let schedule_right = create_schedule_right(&schedule, &Cmax);
         //由schedule和schedule_right得到关键工序，并由此得到关键块
         let (key_block, key_block_index) = create_key_block(&schedule, &schedule_right, data);
         //由关键块对chromo进行N7邻域搜索，得到新的neighbor_chromos
@@ -159,6 +159,102 @@ fn tube_search(
         now_threshold += 1;
     }
     best_chromo
+}
+
+//-------------生成关键工序----------------
+//返回的create_key_job
+fn create_key_job(
+    schedule: &Vec<Vec<i32>>,
+    schedule_right: &Vec<Vec<i32>>,
+    data: &Data,
+) -> vec<(Vec<Vec<i32>>, Vec<usize>) >{
+    let mut schedule_this_fun = schedule.clone();
+    let mut schedule_right_this_fun = schedule_right.clone();
+    
+}
+
+//-------------生成右移schedule_right----------------
+//schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配) 9-10预留]
+fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
+    let mut schedule_right: Vec<Vec<i32>> = Vec::new();
+    let mut schedule_this_fun = schedule.clone();
+    for i in (0..schedule_this_fun.len()).rev() {
+        let mut this_schedule = schedule_this_fun[i].clone();
+        let this_job_id = this_schedule[0];
+        let this_word_id = this_schedule[1];
+        let this_assembly_id = this_schedule[6];
+        //如果是装配工序
+        if this_schedule[7] == 1 {
+            //只需要找到MS
+            let same_machine_schedule: Vec<Vec<i32>> = schedule_right
+                .iter()
+                .filter(|schedule| schedule[7] == 1)
+                .cloned()
+                .collect();
+            if same_machine_schedule.len() == 0 {
+                this_schedule[4] = Cmax;
+                this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
+            } else {
+                this_schedule[4] = same_machine_schedule
+                    .iter()
+                    .map(|schedule| schedule[3])
+                    .max()
+                    .unwrap();
+                this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
+            }
+        } else {
+            // 对于加工工序，找到MS JS和AS
+            // 找到MS
+            let same_machine_schedule: Vec<Vec<i32>> = schedule_right
+                .iter()
+                .filter(|schedule| {
+                    schedule[6] == this_schedule[6] && schedule[2] == this_schedule[2]
+                })
+                .cloned()
+                .collect();
+            
+            let MS_can_end_time = if same_machine_schedule.len() == 0 {
+                Cmax
+            } else {
+                same_machine_schedule
+                    .iter()
+                    .map(|schedule| schedule[4])
+                    .min()
+                    .unwrap()
+            };
+            
+            // 找到JS
+            let JS_schedule: Option<&Vec<i32>> = schedule_right.iter().find(|schedule| {
+                schedule[0] == this_schedule[0] && schedule[1] == this_schedule[1] + 1
+            });
+            
+            let JS_can_end_time = if let Some(schedule) = JS_schedule {
+                schedule[3]
+            } else {
+                Cmax
+            };
+            
+            // 找到AS
+            let AS_schedule: Option<&Vec<i32>> = schedule_right.iter().find(|schedule| {
+                schedule[6] == this_schedule[6] && schedule[7] == 1
+            });
+            
+            let AS_can_end_time = if let Some(schedule) = AS_schedule {
+                schedule[3]
+            } else {
+                Cmax
+            };
+            
+            // 找到最大的开始时间
+            let can_end_time = vec![MS_can_end_time, JS_can_end_time, AS_can_end_time]
+                .iter()
+                .min()
+                .unwrap();
+            this_schedule[4] = *can_end_time;this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
+            // 插入到schedule_right的第一个位置
+            schedule_right.insert(0, this_schedule);
+        }
+    schedule_right
 }
 
 //-------------变异----------------
@@ -313,180 +409,6 @@ fn pox_2(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
     (c1, c2)
 }
 
-// dqgo:gpt性能优化
-
-// fn pox_gpt_inseaces(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
-//     // 初始化随机数生成器
-//     let mut rng = rand::thread_rng();
-
-//     // 获取染色体长度
-//     let len_of_chromosome = p1.len();
-
-//     // 初始化子代染色体
-//     let mut c1 = vec![0; len_of_chromosome];
-//     let mut c2 = vec![0; len_of_chromosome];
-
-//     // 获取工件集 J
-//     let max_value = *p1.iter().max().unwrap();
-//     let j: Vec<usize> = (1..=max_value).collect();
-
-//     // 从 J 中随机选取几位构成 J1，其余的构成 J2
-//     let num_j1 = rng.gen_range(1..=j.len());
-//     let mut shuffled_j = j.clone();
-//     shuffled_j.shuffle(&mut rng);
-//     let j1: HashSet<usize> = shuffled_j.iter().take(num_j1).cloned().collect();
-//     let j2: HashSet<usize> = shuffled_j.iter().skip(num_j1).cloned().collect();
-
-//     // 打印 J1 和 J2
-//     println!("J1: {:?}", j1);
-//     println!("J2: {:?}", j2);
-
-//     // 遍历 p1，对于在 p1 位置 i 上的元素，检查其是否属于工件集 j1，若是，将其值赋给 c1 的位置 i
-//     for (i, &gene) in p1.iter().enumerate() {
-//         if j1.contains(&gene) {
-//             c1[i] = gene;
-//         }
-//     }
-
-//     // 遍历 p2，对于在 p2 位置 i 上的元素，检查其是否属于工件集 j1，若是，将其值赋给 c2 的位置 i
-//     for (i, &gene) in p2.iter().enumerate() {
-//         if j1.contains(&gene) {
-//             c2[i] = gene;
-//         }
-//     }
-
-//     // 打印目前的 c1 和 c2
-//     println!("当前的 c1: {:?}", c1);
-//     println!("当前的 c2: {:?}", c2);
-
-//     // 遍历 p2，对于每个元素，检查其是否属于工件集 j2，若属于，则将其放在 c1 中第一个元素值为 0 的地方
-//     for &gene in p2.iter() {
-//         if j2.contains(&gene) {
-//             if let Some(pos) = c1.iter().position(|&x| x == 0) {
-//                 c1[pos] = gene;
-//             }
-//         }
-//     }
-
-//     // 遍历 p1，对于每个元素，检查其是否属于工件集 j2，若属于，则将其放在 c2 中第一个元素值为 0 的地方
-//     for &gene in p1.iter() {
-//         if j2.contains(&gene) {
-//             if let Some(pos) = c2.iter().position(|&x| x == 0) {
-//                 c2[pos] = gene;
-//             }
-//         }
-//     }
-
-//     // 打印最终的 c1 和 c2
-//     println!("最终的 c1: {:?}", c1);
-//     println!("最终的 c2: {:?}", c2);
-
-//     (c1, c2)
-// }
-
-// POX gpt版本 有错
-// fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
-//     let mut rng = rand::thread_rng();
-//     let len_of_chromosome = p1.len();
-//     let mut children1 = vec![0; len_of_chromosome];
-//     let mut children2 = vec![0; len_of_chromosome];
-
-//     // 随机选择一些基因
-//     let work_num=p1.iter().max().unwrap();
-//     let num_j1 = rng.gen_range(1..=*work_num);
-//     let mut j: Vec<usize> = (1..=*work_num).collect();
-//     j.shuffle(&mut rng);
-//     let j1: Vec<usize> = j.iter().take(num_j1).cloned().collect();
-
-//     // 打印 p1 和 p2
-//     println!("p1: {:?}", p1);
-//     println!("p2: {:?}", p2);
-//     // 打印交换的工件集
-//     println!("交换的工件集: {:?}", j1);
-
-//     // 直接复制到子代染色体中
-//     for &job in &j1 {
-//         for (index, &gene) in p1.iter().enumerate() {
-//             if gene == job {
-//                 children1[index] = gene;
-//             }
-//         }
-//         for (index, &gene) in p2.iter().enumerate() {
-//             if gene == job {
-//                 children2[index] = gene;
-//             }
-//         }
-//     }
-
-//     // 填充剩余的基因
-//     let mut remaining_genes1: Vec<usize> = p1.iter().filter(|&&gene| !children2.contains(&gene)).cloned().collect();
-//     let mut remaining_genes2: Vec<usize> = p2.iter().filter(|&&gene| !children1.contains(&gene)).cloned().collect();
-
-//     for gene in &mut children2 {
-//         if *gene == 0 {
-//             if let Some(next_gene) = remaining_genes1.pop() {
-//                 *gene = next_gene;
-//             }
-//         }
-//     }
-
-//     for gene in &mut children1 {
-//         if *gene == 0 {
-//             if let Some(next_gene) = remaining_genes2.pop() {
-//                 *gene = next_gene;
-//             }
-//         }
-//     }
-
-//     // 打印 c1 和 c2
-//     println!("c1: {:?}", children1);
-//     println!("c2: {:?}", children2);
-
-//     (children1, children2)
-// }
-
-// fn pox(p1: &Vec<usize>, p2: &Vec<usize>) -> (Vec<usize>, Vec<usize>) {
-//     let mut rng = rand::thread_rng();
-//     let len_of_chromosome = p1.len();
-//     let mut children1 = vec![0; len_of_chromosome];
-//     let mut children2 = vec![0; len_of_chromosome];
-
-//     let num_j1 = rng.gen_range(1..=len_of_chromosome);
-//     let mut j: Vec<usize> = (1..=len_of_chromosome).collect();
-//     j.shuffle(&mut rng);
-//     let j1: Vec<usize> = j.iter().take(num_j1).cloned().collect();
-
-//     for &job in &j1 {
-//         for (index, &gene) in p1.iter().enumerate() {
-//             if gene == job {
-//                 children1[index] = gene;
-//             }
-//         }
-//         for (index, &gene) in p2.iter().enumerate() {
-//             if gene == job {
-//                 children2[index] = gene;
-//             }
-//         }
-//     }
-
-//     for (index, &gene) in p1.iter().enumerate() {
-//         if !children2.contains(&gene) {
-//             if let Some(pos) = children2.iter().position(|&x| x == 0) {
-//                 children2[pos] = gene;
-//             }
-//         }
-//     }
-
-//     for (index, &gene) in p2.iter().enumerate() {
-//         if !children1.contains(&gene) {
-//             if let Some(pos) = children1.iter().position(|&x| x == 0) {
-//                 children1[pos] = gene;
-//             }
-//         }
-//     }
-
-//     (children1, children2)
-// }
 //-------------选择----------------
 fn select(
     chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
@@ -539,77 +461,6 @@ fn select(
 
     (elite_chromos, selected_chromos)
 }
-
-// //-------------选择----------------
-// fn select(
-//     chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
-//     fitness: &Vec<i32>,
-//     p_elite: &f64,
-// ) -> (
-//     Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
-//     Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
-// ) {
-//     let total_fitness: i32 = fitness.iter().sum();
-//     let elite_num = (chromos.len() as f64 * p_elite) as usize;
-
-//     let mut elite_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
-//     let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
-
-//     // Combine chromos and fitness into a single vector of tuples
-//     let mut combined: Vec<(&(Vec<usize>, Vec<usize>, Vec<usize>), &i32)> = chromos.iter().zip(fitness.iter()).collect();
-
-//     // Sort by fitness (ascending order)
-//     combined.sort_by_key(|&(_, fit)| fit);
-
-//     // Select elite chromosomes (with the smallest fitness values)
-//     elite_chromos.extend(combined.iter().take(elite_num).map(|&(chromo, _)| chromo.clone()));
-
-//     // Select remaining chromosomes using roulette wheel selection
-//     let mut rng = rand::thread_rng();
-//     for _ in elite_num..chromos.len() {
-//         let random_fitness = rng.gen_range(0..total_fitness);
-//         let mut cumulative_fitness = 0;
-//         let mut index = 0;
-//         while cumulative_fitness < random_fitness {
-//             cumulative_fitness += fitness[index];
-//             index += 1;
-//         }
-//         if index > 0 {
-//             selected_chromos.push(chromos[index - 1].clone());
-//         }
-//     }
-
-//     (elite_chromos, selected_chromos)
-// fn select(chromos:& mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,fitness:&Vec<i32>,p_elite:&f64){
-//     //-------------选择----------------
-//     fn select(chromos: &mut Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, fitness: &Vec<i32>, p_elite: &f64) {
-//         let total_fitness: i32 = fitness.iter().sum();
-//         let elite_num = (chromos.len() as f64 * p_elite) as usize;
-
-//         let mut selected_chromos: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)> = Vec::new();
-
-//         // Select elite chromosomes
-//         let elite_chromos = chromos.iter().take(elite_num).cloned();
-//         selected_chromos.extend(elite_chromos);
-
-//         // Select remaining chromosomes using roulette wheel selection
-//         let mut rng = rand::thread_rng();
-//         let mut cumulative_fitness = 0;
-//         for _ in elite_num..chromos.len() {
-//             let random_fitness = rng.gen_range(0..total_fitness);
-//             let mut index = 0;
-//             while cumulative_fitness < random_fitness {
-//                 cumulative_fitness += fitness[index];
-//                 index += 1;
-//             }
-//             selected_chromos.push(chromos[index].clone());
-//         }
-
-//         // Replace the original chromos with the selected chromos
-//         *chromos = selected_chromos;
-//     }
-// }
-// }
 
 // -------------生成数据----------------
 fn change_data_function() -> Data {
