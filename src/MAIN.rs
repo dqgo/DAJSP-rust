@@ -161,15 +161,96 @@ fn tube_search(
     best_chromo
 }
 
+//schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配) 9-10预留]
+//-------------生成关键块----------------
+fn create_key_block(
+    schedule: &Vec<Vec<i32>>,
+    schedule_right: &Vec<Vec<i32>>,
+    data: &Data,
+) -> Vec<(Vec<Vec<i32>>, Vec<usize>)> {
+    let key_job = create_key_job(schedule, schedule_right, data);
+    let mut key_blocks = Vec::new();
+
+    for (key_schedule, key_indices) in key_job {
+        let mut current_block = Vec::new();
+        let mut current_indices = Vec::new();
+
+        for (i, job) in key_schedule.iter().enumerate() {
+            if current_block.is_empty() {
+                current_block.push(job.clone());
+                current_indices.push(key_indices[i]);
+            } else {
+                let mut is_connected = false;
+                for last_job in &current_block {
+                    if job[6] == last_job[6] && job[3] == last_job[4] && job[3] == last_job[3] {
+                        is_connected = true;
+                        break;
+                    }
+                }
+                if is_connected {
+                    current_block.push(job.clone());
+                    current_indices.push(key_indices[i]);
+                } else {
+                    if current_block.len() >= 2 {
+                        key_blocks.push((current_block.clone(), current_indices.clone()));
+                    }
+                    current_block.clear();
+                    current_indices.clear();
+                    current_block.push(job.clone());
+                    current_indices.push(key_indices[i]);
+                }
+            }
+        }
+
+        if current_block.len() >= 2 {
+            key_blocks.push((current_block, current_indices));
+        }
+    }
+    key_blocks.retain(|(block, _)| !block.iter().any(|job| job[5] == 1));
+    key_blocks
+}
+
 //-------------生成关键工序----------------
 //返回的create_key_job
 fn create_key_job(
     schedule: &Vec<Vec<i32>>,
     schedule_right: &Vec<Vec<i32>>,
     data: &Data,
-) -> vec<(Vec<Vec<i32>>, Vec<usize>)> {
+) -> Vec<(Vec<Vec<i32>>, Vec<usize>)> {
     let mut schedule_this_fun = schedule.clone();
     let mut schedule_right_this_fun = schedule_right.clone();
+    let (index, schedule_this_fun) = sortrows(schedule_this_fun, &[0, 1]);
+    let (index_right, schedule_right_this_fun) = sortrows(schedule_right_this_fun, &[0, 1]);
+    let mut key_index = Vec::new();
+    for i in 0..schedule_this_fun.len() {
+        if schedule_this_fun[i] == schedule_right_this_fun[i] {
+            key_index.push(i);
+        }
+    }
+    let key_index_in_schedule_under_sort: Vec<usize> =
+        key_index.iter().map(|&i| index[i]).collect();
+    let key_schedule: Vec<Vec<i32>> = key_index_in_schedule_under_sort
+        .iter()
+        .map(|&i| schedule[i].clone())
+        .collect();
+    vec![(key_schedule, key_index_in_schedule_under_sort)]
+}
+
+//-------------sortrows-------------
+fn sortrows(matrix: Vec<Vec<i32>>, order: &[usize]) -> (Vec<usize>, Vec<Vec<i32>>) {
+    let mut indexed_matrix: Vec<(usize, Vec<i32>)> = matrix.into_iter().enumerate().collect();
+
+    indexed_matrix.sort_by(|a, b| {
+        for &index in order {
+            if a.1[index] != b.1[index] {
+                return a.1[index].cmp(&b.1[index]);
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
+
+    let (indices, sorted_matrix): (Vec<usize>, Vec<Vec<i32>>) = indexed_matrix.into_iter().unzip();
+    (indices, sorted_matrix)
 }
 
 //-------------生成右移schedule_right----------------
