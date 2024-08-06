@@ -167,9 +167,38 @@ fn create_key_job(
     schedule: &Vec<Vec<i32>>,
     schedule_right: &Vec<Vec<i32>>,
     data: &Data,
-) -> vec<(Vec<Vec<i32>>, Vec<usize>)> {
+) -> Vec<(Vec<Vec<i32>>, Vec<usize>)> {
     let mut schedule_this_fun = schedule.clone();
     let mut schedule_right_this_fun = schedule_right.clone();
+    let (index, schedule_this_fun) = sortrows(schedule_this_fun, &[0, 1]);
+    let (index_right, schedule_right_this_fun) = sortrows(schedule_right_this_fun, &[0, 1]);
+    let mut key_index=Vec::new();
+    for i in 0..schedule_this_fun.len() {
+        if schedule_this_fun[i]==schedule_right_this_fun[i]{
+            key_index.push(i);
+        }
+    }
+    let key_index_in_schedule_under_sort=index(key_index);
+    let key_schedule=schedule[key_index_in_schedule_under_sort];
+    (key_schedule,key_index_in_schedule_under_sort)
+}
+
+
+//-------------sortrows-------------
+fn sortrows(matrix: Vec<Vec<i32>>, order: &[usize]) -> (Vec<usize>, Vec<Vec<i32>>) {
+    let mut indexed_matrix: Vec<(usize, Vec<i32>)> = matrix.into_iter().enumerate().collect();
+    
+    indexed_matrix.sort_by(|a, b| {
+        for &index in order {
+            if a.1[index] != b.1[index] {
+                return a.1[index].cmp(&b.1[index]);
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
+    
+    let (indices, sorted_matrix): (Vec<usize>, Vec<Vec<i32>>) = indexed_matrix.into_iter().unzip();
+    (indices, sorted_matrix)
 }
 
 //-------------生成右移schedule_right----------------
@@ -296,6 +325,7 @@ fn mutate_chromos(
         }
     }
     return_chromos
+    
 }
 
 //-------------交叉----------------
