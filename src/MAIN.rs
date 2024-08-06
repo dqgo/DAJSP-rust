@@ -167,10 +167,9 @@ fn create_key_job(
     schedule: &Vec<Vec<i32>>,
     schedule_right: &Vec<Vec<i32>>,
     data: &Data,
-) -> vec<(Vec<Vec<i32>>, Vec<usize>) >{
+) -> vec<(Vec<Vec<i32>>, Vec<usize>)> {
     let mut schedule_this_fun = schedule.clone();
     let mut schedule_right_this_fun = schedule_right.clone();
-    
 }
 
 //-------------生成右移schedule_right----------------
@@ -212,7 +211,7 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
                 })
                 .cloned()
                 .collect();
-            
+
             let MS_can_end_time = if same_machine_schedule.len() == 0 {
                 Cmax
             } else {
@@ -222,41 +221,40 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
                     .min()
                     .unwrap()
             };
-            
+
             // 找到JS
             let JS_schedule: Option<&Vec<i32>> = schedule_right.iter().find(|schedule| {
                 schedule[0] == this_schedule[0] && schedule[1] == this_schedule[1] + 1
             });
-            
+
             let JS_can_end_time = if let Some(schedule) = JS_schedule {
                 schedule[3]
             } else {
                 Cmax
             };
-            
+
             // 找到AS
-            let AS_schedule: Option<&Vec<i32>> = schedule_right.iter().find(|schedule| {
-                schedule[6] == this_schedule[6] && schedule[7] == 1
-            });
-            
+            let AS_schedule: Option<&Vec<i32>> = schedule_right
+                .iter()
+                .find(|schedule| schedule[6] == this_schedule[6] && schedule[7] == 1);
+
             let AS_can_end_time = if let Some(schedule) = AS_schedule {
                 schedule[3]
             } else {
                 Cmax
             };
-            
+
             // 找到最大的开始时间
-            let can_end_time = vec![MS_can_end_time, JS_can_end_time, AS_can_end_time]
-                .iter()
-                .min()
-                .unwrap();
-            this_schedule[4] = *can_end_time;this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
+            let can_end_times = vec![MS_can_end_time, JS_can_end_time, AS_can_end_time];
+            let can_end_time = can_end_times.iter().min().unwrap();
+            this_schedule[4] = *can_end_time;
+            this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
             // 插入到schedule_right的第一个位置
             schedule_right.insert(0, this_schedule);
         }
+    }
     schedule_right
 }
-
 //-------------变异----------------
 // 对FA向量应用单点随机突变算子，该算子用相关作业的不同工厂索引随机替换元素。
 // 此外，对PS和AS向量使用交换运算符，它随机交换编码向量的两个元素
