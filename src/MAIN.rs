@@ -133,15 +133,14 @@ fn tube_search(
         let Cmax = schedule.iter().map(|x| x[4]).max().unwrap();
         let schedule_right = create_schedule_right(&schedule, &Cmax);
         //由schedule和schedule_right得到关键工序，并由此得到关键块
-        let (key_block, key_block_index) = create_key_block(&schedule, &schedule_right, data);
+        let key_blocks: Vec<(Vec<Vec<i32>>, Vec<usize>)> = create_key_block(&schedule, &schedule_right, data);
         //由关键块对chromo进行N7邻域搜索，得到新的neighbor_chromos
         let (neighbor_chromos, neighbor_schedule, neighbor_sign, PS_start_num) =
             create_neighbor_chromos(
                 &chromo,
                 &schedule,
                 &schedule_right,
-                &key_block,
-                &key_block_index,
+                &key_blocks,
                 data,
             );
         //计算neighbor_chromos的适应度，使用近似评价方法
@@ -159,6 +158,22 @@ fn tube_search(
         now_threshold += 1;
     }
     best_chromo
+}
+
+//-------------使用N7生成邻域解----------------
+fn create_neighbor_chromos(
+    chromo: &(Vec<usize>, Vec<usize>, Vec<usize>),
+    schedule: &Vec<Vec<i32>>,
+    schedule_right: &Vec<Vec<i32>>,
+    key_blocks: &Vec<(Vec<Vec<i32>>, Vec<usize>)>,
+    data: &Data,
+) -> (
+    Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>,
+    Vec<Vec<i32>>,
+    Vec<usize>,
+    usize,
+) {
+    
 }
 
 //schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配) 9-10预留]
@@ -210,7 +225,7 @@ fn create_key_block(
     key_blocks
 }
 
-//-------------生成关键工序----------------
+//-------------生成关键工序----------------git push origin master --force
 //返回的create_key_job
 fn create_key_job(
     schedule: &Vec<Vec<i32>>,
@@ -248,14 +263,13 @@ fn sortrows(matrix: Vec<Vec<i32>>, order: &[usize]) -> (Vec<usize>, Vec<Vec<i32>
         }
         std::cmp::Ordering::Equal
     });
-
     let (indices, sorted_matrix): (Vec<usize>, Vec<Vec<i32>>) = indexed_matrix.into_iter().unzip();
     (indices, sorted_matrix)
 }
 
 //-------------生成右移schedule_right----------------
 //schedule=[1工件号 2工序号  3机器号 4开工时间 5完工时间 6工厂号 7装配号 8属性(0加工/1装配) 9-10预留]
-fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
+fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: &i32) -> Vec<Vec<i32>> {
     let mut schedule_right: Vec<Vec<i32>> = Vec::new();
     let mut schedule_this_fun = schedule.clone();
     for i in (0..schedule_this_fun.len()).rev() {
@@ -272,7 +286,7 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
                 .cloned()
                 .collect();
             if same_machine_schedule.len() == 0 {
-                this_schedule[4] = Cmax;
+                this_schedule[4] = *Cmax;
                 this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
             } else {
                 this_schedule[4] = same_machine_schedule
@@ -298,7 +312,7 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
             } else {
                 same_machine_schedule
                     .iter()
-                    .map(|schedule| schedule[4])
+                    .map(|schedule| &schedule[4])
                     .min()
                     .unwrap()
             };
@@ -311,7 +325,7 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
             let JS_can_end_time = if let Some(schedule) = JS_schedule {
                 schedule[3]
             } else {
-                Cmax
+                *Cmax
             };
 
             // 找到AS
@@ -322,13 +336,13 @@ fn create_schedule_right(schedule: &Vec<Vec<i32>>, Cmax: i32) -> Vec<Vec<i32>> {
             let AS_can_end_time = if let Some(schedule) = AS_schedule {
                 schedule[3]
             } else {
-                Cmax
+                *Cmax
             };
 
             // 找到最大的开始时间
-            let can_end_times = vec![MS_can_end_time, JS_can_end_time, AS_can_end_time];
+            let can_end_times = vec![MS_can_end_time, &JS_can_end_time, &AS_can_end_time];
             let can_end_time = can_end_times.iter().min().unwrap();
-            this_schedule[4] = *can_end_time;
+            this_schedule[4] = **can_end_time;
             this_schedule[3] = this_schedule[4] - (this_schedule[4] - this_schedule[3]);
             // 插入到schedule_right的第一个位置
             schedule_right.insert(0, this_schedule);
@@ -377,6 +391,7 @@ fn mutate_chromos(
         }
     }
     return_chromos
+    
 }
 
 //-------------交叉----------------
